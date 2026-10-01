@@ -109,6 +109,7 @@ export default function App() {
     renderer.render(
       engineRef.current.player,
       engineRef.current.obstacles,
+      engineRef.current.rainbows,
       engineRef.current.collectibles,
       engineRef.current.scenery,
       engineRef.current.particles,
@@ -173,6 +174,7 @@ export default function App() {
       renderer.render(
         engine.player,
         engine.obstacles,
+        engine.rainbows,
         engine.collectibles,
         engine.scenery,
         engine.particles,
@@ -298,6 +300,9 @@ export default function App() {
 
   // Game Control Actions
   const startGame = () => {
+    // Unlock Web Audio context on user interaction
+    sounds.initCtx();
+
     if (!currentPlayer) {
       setAuthMode('signup');
       setIsAuthOpen(true);
@@ -398,6 +403,7 @@ export default function App() {
           onMoveLeft={() => engineRef.current.moveLeft()}
           onMoveRight={() => engineRef.current.moveRight()}
           onJump={() => engineRef.current.jump()}
+          onSlide={() => engineRef.current.slide()}
         />
       )}
 

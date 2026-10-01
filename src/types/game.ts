@@ -16,31 +16,59 @@ export interface DifficultyConfig {
   movingAnimalRate: number;
 }
 
-export type ObstacleType =
-  | 'ROCK'
-  | 'ACACIA_BUSH'
-  | 'FALLEN_TRUNK'
-  | 'ROAD_BARRIER'
-  | 'ORYX'
-  | 'SPRINGBOK'
-  | 'WARTHOG'
-  | 'OSTRICH'
-  | 'MEERKAT';
+// Stationary Obstacles (ROCKS & LOGS only)
+export type StationaryObstacleType =
+  | 'LOW_ROCK'    // Low rock the player must jump over
+  | 'BOULDER'     // Large boulder that blocks a lane, must switch lanes
+  | 'LOW_LOG'     // Wooden log lying across lane, must jump over
+  | 'RAISED_LOG'; // Raised wooden log on supports, must slide under
 
-export type CollectibleType = 'COIN' | 'DIAMOND' | 'STAR';
+// Moving Animals (sideways crossing obstacles)
+export type AnimalType =
+  | 'SPRINGBOK' // Smaller, swift, jumpable
+  | 'OSTRICH'   // Smaller body, jumpable
+  | 'ZEBRA'     // Medium, jumpable
+  | 'LION'      // Fast and dangerous, must be timed
+  | 'RHINO'     // Slow and large, cannot be jumped over
+  | 'ELEPHANT'; // Slow and large, cannot be jumped over
+
+export type ObstacleType = StationaryObstacleType | AnimalType;
+
+// Three collectible tiers: COINS (1x), GOLD (5x on rainbows), DIAMONDS (15x rare)
+export type CollectibleType = 'COIN' | 'GOLD' | 'DIAMOND';
 
 export interface Obstacle {
   id: number;
-  z: number; // Distance ahead of player (0 to maxDistance)
+  z: number; // Distance ahead of player
   lane: Lane;
-  lanePos: number; // Continuous lane position (-1 to 1) for moving animals
+  lanePos: number; // Continuous position (-1 to 1 across track; animals start off-road at ±1.6)
   type: ObstacleType;
   width: number;
   height: number;
   passed: boolean;
-  vx?: number; // Lateral movement speed across lanes for running animals
-  animTime?: number; // Internal animation clock for legs/horns
-  isMoving?: boolean;
+  isMoving: boolean;
+
+  // Animal crossing state
+  isAnimal?: boolean;
+  animalType?: AnimalType;
+  crossingDirection?: -1 | 1; // -1 = right to left, 1 = left to right
+  crossingSpeed?: number;
+  warningSide?: 'left' | 'right';
+  warningTimer?: number; // Counts down before animal enters the road
+  warningPlayed?: boolean;
+  hasEnteredRoad?: boolean;
+  hasLeftRoad?: boolean;
+  canJumpOver?: boolean;
+  requiredJumpHeight?: number;
+
+  animTime?: number;
+}
+
+export interface Rainbow {
+  id: number;
+  z: number;
+  apexLane: Lane; // Lane where rainbow apex and floating gold are positioned
+  passed: boolean;
 }
 
 export interface Collectible {
@@ -49,14 +77,15 @@ export interface Collectible {
   lane: Lane;
   type: CollectibleType;
   collected: boolean;
-  yOffset: number; // For floating/bobbing
+  yOffset: number; // Height above ground (coins: 0 or arc; gold: apex height)
   rotation: number;
+  rainbowId?: number; // If attached to a rainbow apex
 }
 
 export interface SceneryElement {
   id: number;
   z: number;
-  xOffset: number; // negative for left, positive for right
+  xOffset: number;
   type: 'ACACIA_TREE' | 'DEAD_VLEI_TREE' | 'DUNE_SHRUB' | 'MILESTONE_SIGN';
   scale: number;
 }
@@ -85,23 +114,25 @@ export interface ScorePopup {
 export interface PlayerState {
   lane: Lane;
   targetLane: Lane;
-  lanePosition: number; // -1 to 1 continuous for smooth lane changes
-  y: number; // Height above ground (0 when on ground)
-  vy: number; // Vertical velocity
+  lanePosition: number; // -1 to 1 continuous for smooth steering
+  y: number; // Height above ground
+  vy: number;
   isJumping: boolean;
-  runCycle: number; // For leg & arm animation
-  tilt: number; // Leaning when changing lanes
+  isSliding: boolean;
+  slideTimer: number; // Remaining duration of slide
+  runCycle: number;
+  tilt: number;
   invulnerableTime: number;
 }
 
 export interface GameStats {
   score: number;
-  distance: number; // In meters
-  gems: number;
-  coins: number;
+  distance: number; // Meters
+  coins: number;    // 1x common
+  gold: number;     // 5x uncommon (from rainbows)
+  gems: number;     // 15x rare diamonds
   speed: number;
   highScore: number;
   bestDistance: number;
   difficulty: DifficultyLevel;
 }
-

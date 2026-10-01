@@ -143,14 +143,15 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             </span>
           </div>
 
-          {/* Gems & Coins Collected */}
+          {/* Loot Collected: Coins, Gold on Rainbows, and Diamonds */}
           <div className="bg-neutral-800/80 border border-neutral-700/60 rounded-2xl p-2.5 flex flex-col items-center">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-0.5">
               Loot
             </span>
             <div className="flex items-center gap-2 text-xs font-bold text-white">
-              <span className="text-cyan-400">💎 {stats.gems}</span>
-              <span className="text-amber-400">🪙 {stats.coins}</span>
+              <span className="text-amber-400" title="Coins">🪙 {stats.coins}</span>
+              <span className="text-yellow-300" title="Gold">✨ {stats.gold}</span>
+              <span className="text-cyan-400" title="Diamonds">💎 {stats.gems}</span>
             </div>
           </div>
         </div>

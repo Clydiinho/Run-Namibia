@@ -47,21 +47,29 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </span>
           </div>
 
-          {/* Gems & Coins pill */}
-          <div className="flex items-center gap-3 bg-neutral-950/70 backdrop-blur-md border border-neutral-800/80 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-300">
-            <div className="flex items-center gap-1.5 text-cyan-400">
-              <span className="text-sm">💎</span>
-              <span className="font-mono tabular-nums">{stats.gems}</span>
-            </div>
-            <span className="text-neutral-600">·</span>
-            <div className="flex items-center gap-1.5 text-amber-300">
+          {/* Loot Counters: Coins, Gold on Rainbows, and Diamonds */}
+          <div className="flex items-center gap-2.5 bg-neutral-950/75 backdrop-blur-md border border-neutral-800/80 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-300">
+            {/* Coins (1x) */}
+            <div className="flex items-center gap-1 text-amber-300" title="Coins (1x)">
               <span className="text-sm">🪙</span>
               <span className="font-mono tabular-nums">{stats.coins}</span>
             </div>
+            <span className="text-neutral-600">·</span>
+            {/* Gold (5x) from Rainbows */}
+            <div className="flex items-center gap-1 text-yellow-400" title="Gold from Rainbows (5x)">
+              <span className="text-sm">✨</span>
+              <span className="font-mono tabular-nums text-yellow-300">{stats.gold}</span>
+            </div>
+            <span className="text-neutral-600">·</span>
+            {/* Diamonds (15x) */}
+            <div className="flex items-center gap-1 text-cyan-400" title="Rare Diamonds (15x)">
+              <span className="text-sm">💎</span>
+              <span className="font-mono tabular-nums">{stats.gems}</span>
+            </div>
             {stats.highScore > 0 && (
               <>
-                <span className="text-neutral-600">·</span>
-                <span className="text-neutral-400 hidden sm:inline">
+                <span className="text-neutral-600 hidden sm:inline">·</span>
+                <span className="text-neutral-400 hidden sm:inline text-[11px]">
                   Best: <span className="font-mono text-amber-400 tabular-nums">{stats.highScore}</span>
                 </span>
               </>
