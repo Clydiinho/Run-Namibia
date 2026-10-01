@@ -8,6 +8,16 @@ import { StartScreen } from './components/StartScreen';
 import { GameOverModal } from './components/GameOverModal';
 import { MobileControls } from './components/MobileControls';
 import { AiStoryModal } from './components/AiStoryModal';
+import { AuthModal } from './components/AuthModal';
+import { LeaderboardModal } from './components/LeaderboardModal';
+import {
+  fetchCurrentPlayerProfile,
+  signOutPlayer,
+  submitScoreToSupabase,
+  PlayerProfile,
+  ScoreSubmissionResult,
+  supabase,
+} from './lib/supabase';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -26,6 +36,13 @@ export default function App() {
   const [showStory, setShowStory] = useState<boolean>(false);
   const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
 
+  // Supabase Auth and Leaderboard state
+  const [currentPlayer, setCurrentPlayer] = useState<PlayerProfile | null>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
+  const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup');
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
+  const [submissionResult, setSubmissionResult] = useState<ScoreSubmissionResult | null>(null);
+
   const handleSelectDifficulty = (level: DifficultyLevel) => {
     engineRef.current.setDifficulty(level);
     engineRef.current.loadHighScores();
@@ -35,10 +52,30 @@ export default function App() {
   // Touch swipe tracking
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
-  // Detect touch device on mount
+  // Detect touch device and load initial player profile on mount
   useEffect(() => {
     const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     setIsTouchDevice(hasTouch);
+
+    // Initial auth check
+    fetchCurrentPlayerProfile().then((profile) => {
+      if (profile) setCurrentPlayer(profile);
+    });
+
+    // Listen to real-time auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const p = await fetchCurrentPlayerProfile();
+        setCurrentPlayer(p);
+      } else {
+        const p = await fetchCurrentPlayerProfile();
+        setCurrentPlayer(p);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Initialize Renderer and Canvas
@@ -92,7 +129,7 @@ export default function App() {
     const engine = engineRef.current;
 
     engine.setCallbacks(
-      (finalStats) => {
+      async (finalStats) => {
         // Game Over callback
         const previousHigh = finalStats.highScore;
         const newScore = Math.floor(finalStats.score);
@@ -100,6 +137,16 @@ export default function App() {
         setIsNewHigh(hitNewRecord);
         setStats({ ...finalStats });
         setGameState('GAME_OVER');
+
+        // Submit score to Supabase via RPC
+        const result = await submitScoreToSupabase(newScore);
+        if (result) {
+          setSubmissionResult(result);
+          if (result.is_new_best) {
+            setIsNewHigh(true);
+          }
+          setCurrentPlayer((prev) => (prev ? { ...prev, best_score: result.best_score } : null));
+        }
       },
       (newMilestone) => {
         setMilestone(newMilestone);
@@ -173,7 +220,12 @@ export default function App() {
         case 'Space':
           e.preventDefault();
           if (gameState === 'START') {
-            startGame();
+            if (!currentPlayer) {
+              setAuthMode('signup');
+              setIsAuthOpen(true);
+            } else {
+              startGame();
+            }
           } else if (gameState === 'GAME_OVER') {
             restartGame();
           } else {
@@ -201,7 +253,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [gameState]);
+  }, [gameState, currentPlayer]);
 
   // Touch Swipe Gesture Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -246,6 +298,13 @@ export default function App() {
 
   // Game Control Actions
   const startGame = () => {
+    if (!currentPlayer) {
+      setAuthMode('signup');
+      setIsAuthOpen(true);
+      return;
+    }
+
+    setSubmissionResult(null);
     engineRef.current.reset();
     setStats({ ...engineRef.current.stats });
     setGameState('PLAYING');
@@ -289,6 +348,16 @@ export default function App() {
       }
       return next;
     });
+  };
+
+  const handleLogout = async () => {
+    await signOutPlayer();
+    setCurrentPlayer(null);
+  };
+
+  const handleOpenAuth = (mode: 'signup' | 'login' = 'signup') => {
+    setAuthMode(mode);
+    setIsAuthOpen(true);
   };
 
   return (
@@ -356,6 +425,10 @@ export default function App() {
           onSelectDifficulty={handleSelectDifficulty}
           onStart={startGame}
           onShowStory={() => setShowStory(true)}
+          currentPlayer={currentPlayer}
+          onOpenAuth={handleOpenAuth}
+          onLogout={handleLogout}
+          onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
         />
       )}
 
@@ -364,11 +437,32 @@ export default function App() {
         <GameOverModal
           stats={stats}
           isNewHigh={isNewHigh}
+          submissionResult={submissionResult}
           onRestart={restartGame}
           onSelectDifficulty={handleSelectDifficulty}
           onShowStory={() => setShowStory(true)}
+          onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
         />
       )}
+
+      {/* Auth Modal for Sign Up / Log In */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        initialMode={authMode}
+        onClose={() => setIsAuthOpen(false)}
+        onSuccess={async () => {
+          const profile = await fetchCurrentPlayerProfile();
+          setCurrentPlayer(profile);
+          setIsAuthOpen(false);
+        }}
+      />
+
+      {/* Leaderboard Modal */}
+      <LeaderboardModal
+        isOpen={isLeaderboardOpen}
+        onClose={() => setIsLeaderboardOpen(false)}
+        currentPlayer={currentPlayer}
+      />
 
       {/* Live AI Demo Story Slide Modal */}
       {showStory && <AiStoryModal onClose={() => setShowStory(false)} />}
