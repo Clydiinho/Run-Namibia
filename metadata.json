@@ -1,0 +1,7 @@
+{
+  "name": "Run Namibia",
+  "description": "An endless runner game through stylized Namibian landscapes with dunes, acacia trees, obstacles, and gems.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
