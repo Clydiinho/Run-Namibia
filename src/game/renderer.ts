@@ -1,4 +1,5 @@
 import { Collectible, Obstacle, Particle, PlayerState, SceneryElement, ScorePopup } from '../types/game';
+import { RUN_CONFIG } from './config';
 
 export class GameRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -7,7 +8,7 @@ export class GameRenderer {
   private dpr: number = 1;
 
   // Horizon position (percentage of canvas height)
-  private horizonY: number = 0.38;
+  private horizonY: number = RUN_CONFIG.road.horizonY;
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -17,6 +18,9 @@ export class GameRenderer {
     this.width = width;
     this.height = height;
     this.dpr = dpr;
+    // Adapt camera height slightly in mobile portrait vs landscape
+    const isPortrait = height > width;
+    this.horizonY = isPortrait ? 0.33 : RUN_CONFIG.road.horizonY;
   }
 
   /**
@@ -25,8 +29,8 @@ export class GameRenderer {
    */
   public project(lanePos: number, y: number, z: number, cameraOffset: { x: number; y: number } = { x: 0, y: 0 }) {
     const horizon = this.height * this.horizonY + cameraOffset.y;
-    const groundY = this.height * 0.88 + cameraOffset.y;
-    const maxZ = 600;
+    const groundY = this.height * RUN_CONFIG.road.groundY + cameraOffset.y;
+    const maxZ = RUN_CONFIG.road.maxDepthZ;
 
     // Perspective scale factor (1 at player, 0.05 near horizon)
     const perspective = Math.max(0.04, 1 - z / maxZ);
@@ -35,9 +39,14 @@ export class GameRenderer {
     // Screen Y based on distance
     const screenY = horizon + (groundY - horizon) * powScale - y * powScale * 2.2;
 
-    // Road width at this depth
-    const roadWidthAtDepth = this.width * 0.72 * powScale;
-    const laneWidthAtDepth = roadWidthAtDepth / 3;
+    // Roomy road width (+45-50% wider lanes)
+    const isPortrait = this.height > this.width;
+    const roadFactor = isPortrait
+      ? RUN_CONFIG.road.roadWidthFactorPortrait
+      : RUN_CONFIG.road.roadWidthFactorLandscape;
+    const baseRoadWidth = this.width * roadFactor;
+    // Lane width scaled up by laneSpacingMultiplier (1.45)
+    const laneWidthAtDepth = ((baseRoadWidth / 3) * RUN_CONFIG.road.laneSpacingMultiplier * (isPortrait ? 0.86 : 0.82)) * powScale;
 
     // Screen X based on lane position (-1 left, 0 center, +1 right)
     const centerX = this.width / 2 + cameraOffset.x;
@@ -47,7 +56,8 @@ export class GameRenderer {
       x: screenX,
       y: screenY,
       scale: powScale,
-      visible: z >= -10 && z <= maxZ,
+      laneWidth: laneWidthAtDepth,
+      visible: z >= -15 && z <= maxZ,
     };
   }
 
@@ -238,16 +248,18 @@ export class GameRenderer {
     }
 
     // Road Projection Coordinates
-    const topCenter = this.width / 2;
-    const topWidth = this.width * 0.055;
-    const bottomWidth = this.width * 0.78;
+    // Derived dynamically from project() to guarantee the road and lane borders match 100%
+    const projLeftBottom = this.project(-1.75, 0, 0);
+    const projRightBottom = this.project(1.75, 0, 0);
+    const projLeftTop = this.project(-1.75, 0, RUN_CONFIG.road.maxDepthZ * 0.96);
+    const projRightTop = this.project(1.75, 0, RUN_CONFIG.road.maxDepthZ * 0.96);
 
     // Road Gravel Base Surface
     ctx.beginPath();
-    ctx.moveTo(topCenter - topWidth, horizon);
-    ctx.lineTo(topCenter + topWidth, horizon);
-    ctx.lineTo(this.width / 2 + bottomWidth / 2, this.height);
-    ctx.lineTo(this.width / 2 - bottomWidth / 2, this.height);
+    ctx.moveTo(projLeftTop.x, horizon);
+    ctx.lineTo(projRightTop.x, horizon);
+    ctx.lineTo(projRightBottom.x, this.height);
+    ctx.lineTo(projLeftBottom.x, this.height);
     ctx.closePath();
 
     const roadGrad = ctx.createLinearGradient(0, horizon, 0, this.height);
@@ -260,18 +272,15 @@ export class GameRenderer {
 
     // Road Borders / Shoulders (gravel verge)
     ctx.strokeStyle = '#ca8a04';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
-    ctx.moveTo(topCenter - topWidth, horizon);
-    ctx.lineTo(this.width / 2 - bottomWidth / 2, this.height);
-    ctx.moveTo(topCenter + topWidth, horizon);
-    ctx.lineTo(this.width / 2 + bottomWidth / 2, this.height);
+    ctx.moveTo(projLeftTop.x, horizon);
+    ctx.lineTo(projLeftBottom.x, this.height);
+    ctx.moveTo(projRightTop.x, horizon);
+    ctx.lineTo(projRightBottom.x, this.height);
     ctx.stroke();
 
     // Lane Divider Dashes (moving smoothly towards player based on distance)
-    const laneWidthTop = (topWidth * 2) / 3;
-    const laneWidthBottom = bottomWidth / 3;
-
     // 2 Divider lines: between Left & Mid (-0.5 lane) and Mid & Right (+0.5 lane)
     [-0.5, 0.5].forEach((dividerLane) => {
       const numSegments = 16;
@@ -284,7 +293,7 @@ export class GameRenderer {
         if (p1.visible && p2.visible && p1.scale > 0.06) {
           ctx.beginPath();
           ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
-          ctx.lineWidth = Math.max(1.5, 7 * p1.scale);
+          ctx.lineWidth = Math.max(2, 9 * p1.scale);
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
           ctx.stroke();
@@ -332,15 +341,15 @@ export class GameRenderer {
 
   private drawSceneryElement(s: SceneryElement) {
     const ctx = this.ctx;
-    // Scenery sits outside road on left or right
-    const laneOffset = s.xOffset > 0 ? 1.8 + s.xOffset : -1.8 + s.xOffset;
+    // Scenery sits outside the widened road on left or right
+    const laneOffset = s.xOffset > 0 ? 2.15 + s.xOffset : -2.15 + s.xOffset;
     const proj = this.project(laneOffset, 0, s.z);
 
     if (!proj.visible || proj.scale < 0.05) return;
 
     ctx.save();
     ctx.translate(proj.x, proj.y);
-    const size = 180 * proj.scale * s.scale;
+    const size = RUN_CONFIG.entities.sceneryBaseSize * proj.scale * s.scale;
 
     if (s.type === 'ACACIA_TREE') {
       // Camelthorn Acacia Tree (Iconic Namibian flat-topped umbrella tree)
@@ -419,7 +428,7 @@ export class GameRenderer {
     ctx.save();
     ctx.translate(proj.x, proj.y);
 
-    const baseSize = 85 * proj.scale;
+    const baseSize = RUN_CONFIG.entities.obstacleBaseSize * proj.scale;
     const anim = obs.animTime || gameTime;
 
     // Contact Shadow on ground (sizes dynamically with creature body)
@@ -900,7 +909,7 @@ export class GameRenderer {
     ctx.translate(proj.x, proj.y);
 
     // Dynamic scale based on depth
-    const size = 52 * proj.scale;
+    const size = RUN_CONFIG.entities.collectibleBaseSize * proj.scale;
     const rot = col.rotation + gameTime * 3;
 
     // Ground shadow beneath collectible
@@ -1022,7 +1031,7 @@ export class GameRenderer {
     // Leaning / Banking angle when switching lanes
     ctx.rotate(player.tilt * 0.22);
 
-    const size = 95 * proj.scale;
+    const size = RUN_CONFIG.entities.playerBaseSize * proj.scale;
 
     // 1. Cast shadow on ground (shrinks and softens as player jumps higher)
     const shadowProj = this.project(player.lanePosition, 0, 25);
